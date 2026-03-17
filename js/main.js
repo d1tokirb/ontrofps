@@ -516,19 +516,19 @@ function addOtherPlayer(data) {
     leftForeArm.castShadow = true;
 
     // Right arm — extended forward holding gun (group pivoted at shoulder)
+    // Right arm — straight out forward, holding gun
     const rightArmGroup = new THREE.Group();
-    rightArmGroup.position.set(1.45, 6.1, 0);   // shoulder pivot
-    rightArmGroup.rotation.x = 1.05;             // ~60° forward
+    rightArmGroup.position.set(1.45, 5.5, 0); // shoulder pivot
+    rightArmGroup.rotation.x = Math.PI / 2;   // arm pointing straight forward (-Z)
 
     const rightUpperArm = new THREE.Mesh(upperArmGeo, bodyMat);
     rightUpperArm.position.set(0, -0.7, 0);
     rightUpperArm.castShadow = true;
     rightArmGroup.add(rightUpperArm);
 
-    // Elbow sub-pivot
     const rightElbow = new THREE.Group();
     rightElbow.position.set(0, -1.4, 0);
-    rightElbow.rotation.x = -0.25;
+    rightElbow.rotation.x = 0; // fully straight
     rightArmGroup.add(rightElbow);
 
     const rightForeArm = new THREE.Mesh(foreArmGeo, skinMat);
@@ -536,20 +536,18 @@ function addOtherPlayer(data) {
     rightForeArm.castShadow = true;
     rightElbow.add(rightForeArm);
 
-    // Gun at wrist — grip + slide + barrel
+    // Gun at wrist — barrel pointing along -Y (which is forward after arm rotation)
     const gunMat    = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
     const gunAccent = new THREE.MeshPhongMaterial({ color: 0x383838 });
     const wristGun  = new THREE.Group();
-    wristGun.position.set(0.08, -1.25, 0);
-    wristGun.rotation.x = 0.18; // slight level
+    wristGun.position.set(0, -1.35, 0);
 
-    const gunGrip = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.52, 0.18), gunMat);
-    gunGrip.position.set(0, 0, 0.14);
-    const gunSlide = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.88), gunAccent);
-    gunSlide.position.set(0, 0.12, -0.3);
+    const gunGrip = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.52), gunMat);
+    gunGrip.position.set(0, -0.1, 0.18);
+    const gunSlide = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.88, 0.22), gunAccent);
+    gunSlide.position.set(0, -0.3, 0);
     const gunBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.55, 8), gunMat);
-    gunBarrel.rotation.x = Math.PI / 2;
-    gunBarrel.position.set(0, 0.12, -0.85);
+    gunBarrel.position.set(0, -0.75, 0);
     wristGun.add(gunGrip, gunSlide, gunBarrel);
     rightElbow.add(wristGun);
 
