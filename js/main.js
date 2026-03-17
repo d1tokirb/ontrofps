@@ -19,9 +19,23 @@ let globalSettings = {
 const healthBarFill = document.getElementById('health-bar-fill');
 const healthText = document.getElementById('health-text');
 const ammoUI = document.getElementById('ammo-ui');
-const scoreText = document.querySelector('#score span');
 const killfeed = document.getElementById('killfeed');
 const weaponUIElement = document.getElementById('weapon-ui');
+
+// Leaderboard
+const leaderboardEl = document.getElementById('leaderboard');
+const leaderboardData = {}; // id -> { name, kills }
+
+function updateLeaderboard() {
+    const sorted = Object.entries(leaderboardData).sort((a, b) => b[1].kills - a[1].kills);
+    leaderboardEl.innerHTML = '<div class="lb-header">LEADERBOARD</div>' +
+        sorted.map(([id, d]) =>
+            `<div class="lb-row${id === myId ? ' lb-me' : ''}">
+                <span class="lb-name">${d.name}</span>
+                <span class="lb-kills">${d.kills}</span>
+            </div>`
+        ).join('');
+}
 
 // UI Menus and Settings Modals
 const settingsModal = document.getElementById('settings-modal');
@@ -103,18 +117,33 @@ const direction = new THREE.Vector3();
 let currentWeapon = 0;
 const weapons = [];
 const weaponStats = [
-    { name: 'PISTOL', damage: 34, fireRate: 300, sound: 'pistol', spread: 0, maxAmmo: 12, ammo: 12, auto: false },
-    { name: 'ASSAULT RIFLE', damage: 20, fireRate: 100, sound: 'rifle', spread: 0.02, maxAmmo: 30, ammo: 30, auto: true },
-    { name: 'SHOTGUN', damage: 15, fireRate: 800, sound: 'shotgun', spread: 0.1, pellets: 8, maxAmmo: 8, ammo: 8, auto: false },
-    { name: 'SMG', damage: 14, fireRate: 65, sound: 'pistol', spread: 0.04, maxAmmo: 40, ammo: 40, auto: true },
-    { name: 'SNIPER', damage: 90, fireRate: 1200, sound: 'shotgun', spread: 0, maxAmmo: 5, ammo: 5, auto: false }
+    { name: 'PISTOL', damage: 18, fireRate: 300, sound: 'pistol', spread: 0, maxAmmo: 12, ammo: 12, auto: false },
+    { name: 'ASSAULT RIFLE', damage: 11, fireRate: 100, sound: 'rifle', spread: 0.02, maxAmmo: 30, ammo: 30, auto: true },
+    { name: 'SHOTGUN', damage: 8, fireRate: 800, sound: 'shotgun', spread: 0.1, pellets: 8, maxAmmo: 8, ammo: 8, auto: false },
+    { name: 'SMG', damage: 8, fireRate: 65, sound: 'pistol', spread: 0.04, maxAmmo: 40, ammo: 40, auto: true },
+    { name: 'SNIPER', damage: 70, fireRate: 1200, sound: 'shotgun', spread: 0, maxAmmo: 5, ammo: 5, auto: false }
 ];
 let lastFireTime = 0;
 let autoFireInterval = null;
 let isMouseDown = false;
 let isScoped = false;
 
-let score = 0;
+let myPlayerName = '';
+
+// Spawn points spread across the map, away from buildings
+const SPAWN_POINTS = [
+    [  0,   0], [  0, 100], [  0, -100],
+    [100,   0], [-100,  0], [100, 100],
+    [100, -100], [-100, 100], [-100, -100],
+    [ 50,  50], [ 50, -50], [-50,  50], [-50, -50],
+    [300,  50], [300, -50], [-300, 50], [-300, -50],
+    [ 50, 300], [-50, 300], [ 50, -300], [-50, -300],
+];
+
+function getRandomSpawn() {
+    const [x, z] = SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)];
+    return { x, y: 30, z };
+}
 
 // Gun effects
 let muzzleLight = null;
@@ -248,6 +277,7 @@ const uiElements = ['crosshair', 'instructions', 'hud-top', 'hud-bottom'];
 
 startBtn.addEventListener('click', () => {
     const name = playerNameInput.value.trim() || 'Guest';
+    myPlayerName = name;
     if(typeof io !== 'undefined') {
         // ======= DEPLOYMENT CONFIG =======
         // 1. Deploy 'server.js' to Railway.app
@@ -272,11 +302,13 @@ function setupMultiplayer(name) {
     socket.on('connect', () => {
         myId = socket.id;
         socket.emit('joinGame', name);
-        
+        leaderboardData[myId] = { name: name, kills: 0 };
+        updateLeaderboard();
+
         // Hide menu, show UI, start rendering mechanics
         mainMenu.style.display = 'none';
         uiElements.forEach(id => document.getElementById(id).style.display = 'block');
-        
+
         isPlaying = true;
         init();
         animate();
@@ -295,21 +327,22 @@ function setupMultiplayer(name) {
     socket.on('playerMoved', (playerData) => {
         if (otherPlayers[playerData.id]) {
             const bot = otherPlayers[playerData.id];
-            // Smoothly move towards target in a real game, here we snap
-            bot.group.position.set(playerData.x, playerData.y, playerData.z);
-            bot.group.rotation.set(playerData.rx, playerData.ry, playerData.rz);
+            bot.group.position.set(playerData.x, playerData.y - 10, playerData.z);
+            bot.group.rotation.y = playerData.ry;
         }
     });
 
     socket.on('playerLeft', (id) => {
         if (otherPlayers[id]) {
             scene.remove(otherPlayers[id].group);
-            // remove from shootable
+            otherPlayers[id].tag.remove();
             otherPlayers[id].meshes.forEach(m => {
                 const idx = shootableObjects.indexOf(m);
                 if(idx > -1) shootableObjects.splice(idx, 1);
             });
             delete otherPlayers[id];
+            delete leaderboardData[id];
+            updateLeaderboard();
         }
     });
 
@@ -343,33 +376,27 @@ function setupMultiplayer(name) {
     });
 
     socket.on('playerDied', (data) => {
-        if (data.killer === myId) {
-            score += 100;
-            scoreText.innerText = score;
+        // Update leaderboard kill count
+        if (leaderboardData[data.killer]) {
+            leaderboardData[data.killer].kills++;
+            updateLeaderboard();
+        }
 
+        if (data.killer === myId) {
+            const victimName = otherPlayers[data.victim] ? otherPlayers[data.victim].name : 'a player';
             const killMsg = document.createElement('div');
             killMsg.className = 'kill-entry';
-            killMsg.innerText = `You eliminated ${otherPlayers[data.victim] ? otherPlayers[data.victim].name : 'a player'}  +100`;
+            killMsg.innerText = `You eliminated ${victimName}  +100`;
             killfeed.appendChild(killMsg);
             setTimeout(() => { killMsg.remove(); }, 3000);
         }
     });
 
-    socket.on('respawn', () => {
-        controls.getObject().position.set(
-            (Math.random() - 0.5) * 200, 
-            30, 
-            (Math.random() - 0.5) * 200
-        );
-        velocity.set(0, 0, 0);
-        
-        // Reset full health UI
-        healthBarFill.style.width = '100%';
-        healthText.innerText = '100';
-        
-        // Refill Ammo
-        weaponStats.forEach(w => w.ammo = w.maxAmmo);
-        updateAmmoUI();
+    socket.on('respawn', (data) => {
+        const killerName = data && data.killer && leaderboardData[data.killer]
+            ? leaderboardData[data.killer].name
+            : '';
+        showDeathScreen(killerName);
     });
 
     socket.on('playShootEffect', (data) => {
@@ -378,53 +405,143 @@ function setupMultiplayer(name) {
     });
 }
 
+function showDeathScreen(killerName) {
+    const deathScreen = document.getElementById('death-screen');
+    const killerText = document.getElementById('death-killer-text');
+    killerText.innerText = killerName ? `Eliminated by ${killerName}` : '';
+    deathScreen.classList.remove('hidden');
+    let countdown = 3;
+    document.getElementById('respawn-countdown').innerText = countdown;
+    const interval = setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+            clearInterval(interval);
+            deathScreen.classList.add('hidden');
+            doRespawn();
+        } else {
+            document.getElementById('respawn-countdown').innerText = countdown;
+        }
+    }, 1000);
+}
+
+function doRespawn() {
+    if (!controls) return;
+    const spawn = getRandomSpawn();
+    controls.getObject().position.set(spawn.x, spawn.y, spawn.z);
+    velocity.set(0, 0, 0);
+    healthBarFill.style.width = '100%';
+    healthText.innerText = '100';
+    weaponStats.forEach(w => w.ammo = w.maxAmmo);
+    updateAmmoUI();
+}
+
 function addOtherPlayer(data) {
-    if(!scene) return; // If scene not yet running
-    
+    if(!scene) return;
+
     const botGroup = new THREE.Group();
-    
-    const bodyGeo = new THREE.CylinderGeometry(2, 2, 6, 12);
-    const bodyMat = new THREE.MeshPhongMaterial({color: data.color || 0x3333ff});
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 3;
-    body.castShadow = true;
-    
-    const headGeo = new THREE.BoxGeometry(3, 3, 3);
-    const headMat = new THREE.MeshPhongMaterial({color: 0xffccaa});
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 7.5;
+    const color = data.color || 0x3333ff;
+
+    const bodyMat = new THREE.MeshPhongMaterial({ color: color });
+    const skinMat = new THREE.MeshPhongMaterial({ color: 0xffccaa });
+    const pantsMat = new THREE.MeshPhongMaterial({ color: 0x222233 });
+    const bootMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
+
+    // Torso
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.6, 1.1), bodyMat);
+    torso.position.y = 5.3;
+    torso.castShadow = true;
+
+    // Head
+    const head = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), skinMat);
+    head.position.y = 7.25;
     head.castShadow = true;
 
     // Visor
-    const eyeGeo = new THREE.BoxGeometry(2, 0.8, 0.2);
-    const eyeMat = new THREE.MeshPhongMaterial({color: 0x111111});
-    const eye = new THREE.Mesh(eyeGeo, eyeMat);
-    eye.position.set(0, 0, -1.6);
-    head.add(eye);
-    
-    botGroup.add(body);
-    botGroup.add(head);
-    
-    botGroup.position.set(data.x, data.y, data.z);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.45, 0.12), new THREE.MeshPhongMaterial({ color: 0x112233 }));
+    visor.position.set(0, 0.1, -0.82);
+    head.add(visor);
+
+    // Upper arms (attached to torso sides)
+    const upperArmGeo = new THREE.BoxGeometry(0.65, 1.4, 0.65);
+    const leftUpperArm = new THREE.Mesh(upperArmGeo, bodyMat);
+    leftUpperArm.position.set(-1.55, 5.4, 0);
+    leftUpperArm.castShadow = true;
+
+    const rightUpperArm = new THREE.Mesh(upperArmGeo, bodyMat);
+    rightUpperArm.position.set(1.55, 5.4, 0);
+    rightUpperArm.castShadow = true;
+
+    // Forearms (skin)
+    const foreArmGeo = new THREE.BoxGeometry(0.55, 1.2, 0.55);
+    const leftForeArm = new THREE.Mesh(foreArmGeo, skinMat);
+    leftForeArm.position.set(-1.55, 4.1, 0);
+    leftForeArm.castShadow = true;
+
+    const rightForeArm = new THREE.Mesh(foreArmGeo, skinMat);
+    rightForeArm.position.set(1.55, 4.1, 0);
+    rightForeArm.castShadow = true;
+
+    // Upper legs
+    const upperLegGeo = new THREE.BoxGeometry(0.9, 1.6, 0.9);
+    const leftUpperLeg = new THREE.Mesh(upperLegGeo, pantsMat);
+    leftUpperLeg.position.set(-0.62, 3.15, 0);
+    leftUpperLeg.castShadow = true;
+
+    const rightUpperLeg = new THREE.Mesh(upperLegGeo, pantsMat);
+    rightUpperLeg.position.set(0.62, 3.15, 0);
+    rightUpperLeg.castShadow = true;
+
+    // Lower legs
+    const lowerLegGeo = new THREE.BoxGeometry(0.8, 1.6, 0.8);
+    const leftLowerLeg = new THREE.Mesh(lowerLegGeo, pantsMat);
+    leftLowerLeg.position.set(-0.62, 1.55, 0);
+    leftLowerLeg.castShadow = true;
+
+    const rightLowerLeg = new THREE.Mesh(lowerLegGeo, pantsMat);
+    rightLowerLeg.position.set(0.62, 1.55, 0);
+    rightLowerLeg.castShadow = true;
+
+    // Boots
+    const bootGeo = new THREE.BoxGeometry(0.9, 0.6, 1.1);
+    const leftBoot = new THREE.Mesh(bootGeo, bootMat);
+    leftBoot.position.set(-0.62, 0.3, 0.1);
+
+    const rightBoot = new THREE.Mesh(bootGeo, bootMat);
+    rightBoot.position.set(0.62, 0.3, 0.1);
+
+    botGroup.add(torso, head, leftUpperArm, rightUpperArm, leftForeArm, rightForeArm,
+        leftUpperLeg, rightUpperLeg, leftLowerLeg, rightLowerLeg, leftBoot, rightBoot);
+
+    // Subtract camera height (10) so feet are on the ground
+    botGroup.position.set(data.x, data.y - 10, data.z);
     scene.add(botGroup);
 
-    // Give them a nametag (using simple DOM element overlay for easy implementation without canvas textures)
     const tag = document.createElement('div');
     tag.innerText = data.name;
     tag.style.position = 'absolute';
     tag.style.color = 'white';
-    tag.style.textShadow = '1px 1px 2px black';
+    tag.style.fontFamily = "'Rajdhani', sans-serif";
+    tag.style.fontWeight = '600';
+    tag.style.fontSize = '14px';
+    tag.style.letterSpacing = '1px';
+    tag.style.textShadow = '0 1px 4px rgba(0,0,0,0.9)';
     tag.style.pointerEvents = 'none';
     tag.style.transform = 'translate(-50%, -50%)';
     tag.style.display = 'none';
     document.body.appendChild(tag);
-    
+
     const userData = { isPlayer: true, id: data.id };
-    body.userData = { ...userData, isHead: false };
-    head.userData = { ...userData, isHead: true };
-    shootableObjects.push(body, head);
-    
-    otherPlayers[data.id] = { group: botGroup, meshes: [body, head], tag: tag };
+    const shootableParts = [torso, head, leftUpperArm, rightUpperArm, leftForeArm, rightForeArm,
+        leftUpperLeg, rightUpperLeg, leftLowerLeg, rightLowerLeg];
+    shootableParts.forEach(m => {
+        m.userData = { ...userData, isHead: m === head };
+    });
+    shootableObjects.push(...shootableParts);
+
+    otherPlayers[data.id] = { group: botGroup, meshes: shootableParts, tag: tag, name: data.name };
+
+    leaderboardData[data.id] = { name: data.name, kills: 0 };
+    updateLeaderboard();
 }
 
 // Initial calls moved inside setupMultiplayer
@@ -1094,7 +1211,7 @@ function animate() {
         for (let id in otherPlayers) {
             const p = otherPlayers[id];
             const pos = p.group.position.clone();
-            pos.y += 10; // above head
+            pos.y += 9; // above head
             pos.project(camera);
             
             if (pos.z < 1) { // In front of camera

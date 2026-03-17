@@ -244,23 +244,103 @@ body::before {
     z-index: 5;
 }
 
-#score {
+#leaderboard {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     color: var(--text-muted);
     text-transform: uppercase;
-    background: rgba(12,13,15,0.6);
-    padding: 8px 14px;
+    background: rgba(12,13,15,0.72);
+    backdrop-filter: blur(6px);
     border-radius: 3px;
     border-left: 2px solid var(--accent);
+    min-width: 180px;
+    overflow: hidden;
 }
-#score span {
+.lb-header {
+    font-size: 10px;
+    letter-spacing: 3px;
     color: var(--accent);
-    font-size: 18px;
     font-weight: 700;
-    margin-left: 6px;
+    padding: 7px 12px 5px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.lb-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 12px;
+    gap: 24px;
+}
+.lb-row.lb-me { color: var(--text); }
+.lb-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+}
+.lb-kills {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+/* Death / Respawn Screen */
+#death-screen {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    pointer-events: auto;
+}
+#death-screen.hidden { display: none; }
+.death-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+.death-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 4rem;
+    font-weight: 700;
+    letter-spacing: 8px;
+    color: var(--danger);
+    text-shadow: 0 0 40px rgba(224,64,64,0.6);
+    animation: deathPulse 1s ease-in-out infinite alternate;
+}
+@keyframes deathPulse {
+    from { opacity: 0.8; }
+    to   { opacity: 1; text-shadow: 0 0 60px rgba(224,64,64,0.9); }
+}
+.death-killer {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+.death-timer {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-top: 8px;
+}
+.death-timer span {
+    color: var(--accent);
+    font-size: 1.4rem;
+    font-weight: 700;
 }
 
 #killfeed {
