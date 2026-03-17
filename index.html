@@ -54,10 +54,25 @@
 
         <!-- Death / Respawn Screen -->
         <div id="death-screen" class="hidden">
+            <div class="death-vignette"></div>
+            <div class="death-grid"></div>
             <div class="death-content">
-                <div class="death-title">YOU WERE ELIMINATED</div>
+                <div class="death-eyebrow">KILL CONFIRMED</div>
+                <div class="death-title">ELIMINATED</div>
                 <div class="death-killer" id="death-killer-text"></div>
-                <div class="death-timer">Respawning in <span id="respawn-countdown">3</span></div>
+                <div class="death-divider"></div>
+                <div class="death-countdown-wrap">
+                    <div class="death-countdown-label">AUTO-RESPAWN IN <span id="respawn-countdown">5</span>s</div>
+                    <div class="death-bar-track"><div class="death-bar-fill" id="death-bar-fill"></div></div>
+                </div>
+                <div class="death-actions">
+                    <button id="death-respawn-btn" class="death-btn death-btn-respawn">
+                        <span class="death-btn-icon">↺</span> RESPAWN NOW
+                    </button>
+                    <button id="death-menu-btn" class="death-btn death-btn-menu">
+                        ← MAIN MENU
+                    </button>
+                </div>
             </div>
         </div>
 

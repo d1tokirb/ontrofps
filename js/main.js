@@ -327,8 +327,10 @@ function setupMultiplayer(name) {
     socket.on('playerMoved', (playerData) => {
         if (otherPlayers[playerData.id]) {
             const bot = otherPlayers[playerData.id];
-            bot.group.position.set(playerData.x, playerData.y - 10, playerData.z);
+            bot.group.position.set(playerData.x, playerData.y - 7, playerData.z);
             bot.group.rotation.y = playerData.ry;
+            // Re-show model when they start moving again after respawn
+            if (!bot.group.visible) bot.group.visible = true;
         }
     });
 
@@ -364,14 +366,6 @@ function setupMultiplayer(name) {
             const dmgFlash = document.getElementById('damage-flash');
             dmgFlash.classList.add('active');
             setTimeout(() => dmgFlash.classList.remove('active'), 180);
-        } else if (otherPlayers[data.id]) {
-            // Another player got hit
-            const p = otherPlayers[data.id];
-            p.meshes.forEach(m => {
-                const orig = m.material.color.getHex();
-                m.material.color.setHex(0xffffff);
-                setTimeout(() => m.material.color.setHex(orig), 100);
-            });
         }
     });
 
@@ -382,13 +376,19 @@ function setupMultiplayer(name) {
             updateLeaderboard();
         }
 
+        // Hide the dead player's model
+        if (otherPlayers[data.victim]) {
+            otherPlayers[data.victim].group.visible = false;
+            otherPlayers[data.victim].tag.style.display = 'none';
+        }
+
         if (data.killer === myId) {
             const victimName = otherPlayers[data.victim] ? otherPlayers[data.victim].name : 'a player';
             const killMsg = document.createElement('div');
             killMsg.className = 'kill-entry';
-            killMsg.innerText = `You eliminated ${victimName}  +100`;
+            killMsg.innerText = `⚡ You eliminated ${victimName}`;
             killfeed.appendChild(killMsg);
-            setTimeout(() => { killMsg.remove(); }, 3000);
+            setTimeout(() => { killMsg.remove(); }, 3500);
         }
     });
 
@@ -408,20 +408,50 @@ function setupMultiplayer(name) {
 function showDeathScreen(killerName) {
     const deathScreen = document.getElementById('death-screen');
     const killerText = document.getElementById('death-killer-text');
+    const barFill = document.getElementById('death-bar-fill');
+    const countdownEl = document.getElementById('respawn-countdown');
+    const respawnBtn = document.getElementById('death-respawn-btn');
+    const menuBtn = document.getElementById('death-menu-btn');
+
     killerText.innerText = killerName ? `Eliminated by ${killerName}` : '';
     deathScreen.classList.remove('hidden');
-    let countdown = 3;
-    document.getElementById('respawn-countdown').innerText = countdown;
+
+    // Reset and animate countdown bar
+    let countdown = 5;
+    barFill.style.transition = 'none';
+    barFill.style.width = '100%';
+    requestAnimationFrame(() => {
+        barFill.style.transition = `width ${countdown}s linear`;
+        barFill.style.width = '0%';
+    });
+    countdownEl.innerText = countdown;
+
+    let resolved = false;
+    function resolve(action) {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(interval);
+        deathScreen.classList.add('hidden');
+        if (action === 'menu') {
+            window.location.reload();
+        } else {
+            doRespawn();
+        }
+    }
+
     const interval = setInterval(() => {
         countdown--;
-        if (countdown <= 0) {
-            clearInterval(interval);
-            deathScreen.classList.add('hidden');
-            doRespawn();
-        } else {
-            document.getElementById('respawn-countdown').innerText = countdown;
-        }
+        countdownEl.innerText = countdown;
+        if (countdown <= 0) resolve('respawn');
     }, 1000);
+
+    // Clone buttons to clear old listeners
+    const newRespawn = respawnBtn.cloneNode(true);
+    const newMenu = menuBtn.cloneNode(true);
+    respawnBtn.replaceWith(newRespawn);
+    menuBtn.replaceWith(newMenu);
+    newRespawn.addEventListener('click', () => resolve('respawn'));
+    newMenu.addEventListener('click', () => resolve('menu'));
 }
 
 function doRespawn() {
@@ -509,11 +539,23 @@ function addOtherPlayer(data) {
     const rightBoot = new THREE.Mesh(bootGeo, bootMat);
     rightBoot.position.set(0.62, 0.3, 0.1);
 
-    botGroup.add(torso, head, leftUpperArm, rightUpperArm, leftForeArm, rightForeArm,
-        leftUpperLeg, rightUpperLeg, leftLowerLeg, rightLowerLeg, leftBoot, rightBoot);
+    // Gun in right hand
+    const gunMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+    const gunAccent = new THREE.MeshPhongMaterial({ color: 0x444444 });
+    const gunGrip = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.5, 0.18), gunMat);
+    gunGrip.position.set(1.78, 3.4, -0.15);
+    const gunSlide = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.85), gunAccent);
+    gunSlide.position.set(1.78, 3.62, -0.55);
+    const gunBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 8), gunMat);
+    gunBarrel.rotation.x = Math.PI / 2;
+    gunBarrel.position.set(1.78, 3.62, -1.1);
 
-    // Subtract camera height (10) so feet are on the ground
-    botGroup.position.set(data.x, data.y - 10, data.z);
+    botGroup.add(torso, head, leftUpperArm, rightUpperArm, leftForeArm, rightForeArm,
+        leftUpperLeg, rightUpperLeg, leftLowerLeg, rightLowerLeg, leftBoot, rightBoot,
+        gunGrip, gunSlide, gunBarrel);
+
+    // Subtract eye height (7) so feet are on the ground
+    botGroup.position.set(data.x, data.y - 7, data.z);
     scene.add(botGroup);
 
     const tag = document.createElement('div');
@@ -815,7 +857,7 @@ function buildCity() {
 
 function init() {
     camera = new THREE.PerspectiveCamera(globalSettings.fov, window.innerWidth / window.innerHeight, 1, 2000);
-    camera.position.y = 10;
+    camera.position.y = 7;
 
     scene = new THREE.Scene();
     // Realistic city overcast day environment
@@ -1189,9 +1231,9 @@ function animate() {
 
         // Vertical movement
         playerObj.position.y += (velocity.y * delta); 
-        if (playerObj.position.y < 10) {
+        if (playerObj.position.y < 7) {
             velocity.y = 0;
-            playerObj.position.y = 10;
+            playerObj.position.y = 7;
             canJump = true;
         }
         
