@@ -1150,12 +1150,31 @@ function onMouseUp(event) {
     }
 }
 
+function getFloorHeight(px, pz) {
+    let h = 0;
+    for (const obj of objects) {
+        const minX = obj.position.x - obj.scale.x / 2;
+        const maxX = obj.position.x + obj.scale.x / 2;
+        const minZ = obj.position.z - obj.scale.z / 2;
+        const maxZ = obj.position.z + obj.scale.z / 2;
+        if (px > minX && px < maxX && pz > minZ && pz < maxZ) {
+            h = Math.max(h, obj.position.y + obj.scale.y / 2);
+        }
+    }
+    return h;
+}
+
 function checkCollision(position) {
     const px = position.x;
     const pz = position.z;
+    const feetY = position.y - 7; // camera is at eye height 7
     const radius = 3;
 
-    for (let obj of objects) {
+    for (const obj of objects) {
+        const objTop = obj.position.y + obj.scale.y / 2;
+        // Skip if player's feet are at or above this object's top (they're standing on it)
+        if (feetY >= objTop - 0.5) continue;
+
         const minX = obj.position.x - obj.scale.x / 2 - radius;
         const maxX = obj.position.x + obj.scale.x / 2 + radius;
         const minZ = obj.position.z - obj.scale.z / 2 - radius;
@@ -1246,9 +1265,10 @@ function animate() {
 
         // Vertical movement
         playerObj.position.y += (velocity.y * delta);
-        if (playerObj.position.y < 7) {
+        const floorY = getFloorHeight(playerObj.position.x, playerObj.position.z) + 7;
+        if (playerObj.position.y < floorY) {
             velocity.y = 0;
-            playerObj.position.y = 7;
+            playerObj.position.y = floorY;
             canJump = true;
         }
         
