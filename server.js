@@ -84,6 +84,10 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('playShootEffect', { id: socket.id, weapon: data.weapon });
     });
 
+    socket.on('playerRespawned', () => {
+        socket.broadcast.emit('playerRespawned', socket.id);
+    });
+
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
         delete players[socket.id];

@@ -131,44 +131,17 @@ let isScoped = false;
 let myPlayerName = '';
 let isDead = false;
 
-// Ramp / platform / ceiling collision data (populated by buildIndustrialMap)
-const rampSurfaces  = []; // {minX,maxX,minZ,maxZ, startY,endY, axis:'x'|'z'}
-const platforms     = []; // {minX,maxX,minZ,maxZ, y}
-const ceilingSurfaces = []; // {minX,maxX,minZ,maxZ, y}  — inner ceiling height
-
-function getFloorHeight(px, pz) {
-    let h = 0;
-    for (const p of platforms) {
-        if (px > p.minX && px < p.maxX && pz > p.minZ && pz < p.maxZ)
-            h = Math.max(h, p.y);
-    }
-    for (const r of rampSurfaces) {
-        if (px > r.minX && px < r.maxX && pz > r.minZ && pz < r.maxZ) {
-            const t = r.axis === 'z'
-                ? (pz - r.minZ) / (r.maxZ - r.minZ)
-                : (px - r.minX) / (r.maxX - r.minX);
-            h = Math.max(h, r.startY + t * (r.endY - r.startY));
-        }
-    }
-    return h;
-}
-
-// Spawn points spread across the map, away from buildings
+// Spawn points spread across the city, away from buildings
 const SPAWN_POINTS = [
-    // Open ground-level areas clear of buildings
-    [  0,  150], [  0, -150],
-    [ 120,  150], [-120,  150],
-    [ 120, -150], [-120, -150],
-    [ 100,    0], [-100,    0],
-    [ 340,  150], [ 340, -50],
-    [-340,  50],  [-340, -150],
-    [ 80,  -170], [-80,  -170],
-    [ 200,  170], [-160,   30],
+    [0, 0], [100, 100], [-100, 100], [100, -100], [-100, -100],
+    [200, 0], [-200, 0], [0, 200], [0, -200],
+    [150, 150], [-150, 150], [150, -150], [-150, -150],
+    [300, 100], [-300, 100], [300, -100], [-300, -100],
 ];
 
 function getRandomSpawn() {
     const [x, z] = SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)];
-    return { x, y: 30, z };
+    return { x, y: 7, z };
 }
 
 // Gun effects
@@ -355,8 +328,14 @@ function setupMultiplayer(name) {
             const bot = otherPlayers[playerData.id];
             bot.group.position.set(playerData.x, playerData.y - 7, playerData.z);
             bot.group.rotation.y = playerData.ry;
-            // Re-show model when they start moving again after respawn
-            if (!bot.group.visible) bot.group.visible = true;
+        }
+    });
+
+    socket.on('playerRespawned', (id) => {
+        if (otherPlayers[id]) {
+            otherPlayers[id].dead = false;
+            otherPlayers[id].group.visible = true;
+            otherPlayers[id].tag.style.display = 'block';
         }
     });
 
@@ -404,6 +383,7 @@ function setupMultiplayer(name) {
 
         // Hide the dead player's model
         if (otherPlayers[data.victim]) {
+            otherPlayers[data.victim].dead = true;
             otherPlayers[data.victim].group.visible = false;
             otherPlayers[data.victim].tag.style.display = 'none';
         }
@@ -495,6 +475,7 @@ function doRespawn() {
     healthText.innerText = '100';
     weaponStats.forEach(w => w.ammo = w.maxAmmo);
     updateAmmoUI();
+    if (socket) socket.emit('playerRespawned');
     controls.lock();
 }
 
@@ -627,7 +608,7 @@ function addOtherPlayer(data) {
     shootableParts.forEach(m => { m.userData = { ...userData, isHead: m === head }; });
     shootableObjects.push(...shootableParts);
 
-    otherPlayers[data.id] = { group: botGroup, meshes: shootableParts, tag: tag, name: data.name };
+    otherPlayers[data.id] = { group: botGroup, meshes: shootableParts, tag: tag, name: data.name, dead: false };
 
     leaderboardData[data.id] = { name: data.name, kills: 0 };
     updateLeaderboard();
@@ -849,228 +830,55 @@ function switchWeapon(index) {
 
 // Bot spawning removed. Reserved for player spawning logic via multiplayer.
 
-function buildIndustrialMap() {
-    // ── Materials ─────────────────────────────────────────────────────────
-    const mConc   = new THREE.MeshStandardMaterial({ color: 0x3e3e38, roughness: 0.95, metalness: 0.05 });
-    const mSteel  = new THREE.MeshStandardMaterial({ color: 0x28323c, roughness: 0.55, metalness: 0.80 });
-    const mRust   = new THREE.MeshStandardMaterial({ color: 0x5a2e12, roughness: 0.90, metalness: 0.25 });
-    const mCont   = new THREE.MeshStandardMaterial({ color: 0x2d3d20, roughness: 0.85, metalness: 0.15 }); // container green
-    const mCont2  = new THREE.MeshStandardMaterial({ color: 0x3d2010, roughness: 0.85, metalness: 0.15 }); // container red
-    const mHaz    = new THREE.MeshStandardMaterial({ color: 0x7a6210, roughness: 0.80, metalness: 0.10 }); // hazard yellow
-    const mDark   = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.90, metalness: 0.00 }); // boundary
-    const mCat    = new THREE.MeshStandardMaterial({ color: 0x1e2830, roughness: 0.50, metalness: 0.85 }); // catwalk grating
+function buildCity() {
+    const mGray   = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8, metalness: 0.1 });
+    const mBlue   = new THREE.MeshStandardMaterial({ color: 0x667799, roughness: 0.7, metalness: 0.2 });
+    const mBrown  = new THREE.MeshStandardMaterial({ color: 0x886644, roughness: 0.85, metalness: 0.05 });
+    const mCover  = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.0 });
+    const mWall   = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9, metalness: 0.0 });
     const geo1    = new THREE.BoxGeometry(1, 1, 1);
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-    // box: cx/cz = centre X/Z, baseY = bottom face Y
-    function box(cx, cz, w, d, h, baseY, mat, noCollide) {
+    function addBox(cx, cz, w, d, h, mat) {
         const m = new THREE.Mesh(geo1, mat);
         m.scale.set(w, h, d);
-        m.position.set(cx, baseY + h * 0.5, cz);
+        m.position.set(cx, h * 0.5, cz);
         m.castShadow = globalSettings.shadows;
         m.receiveShadow = globalSettings.shadows;
         scene.add(m);
-        if (!noCollide) objects.push(m);
-        return m;
+        objects.push(m);
     }
 
-    // elevated flat platform (slab of thickness 3, top surface at surfaceY)
-    function platform(cx, cz, w, d, surfaceY, mat) {
-        box(cx, cz, w, d, 3, surfaceY - 3, mat);
-        platforms.push({ minX: cx - w * 0.5, maxX: cx + w * 0.5,
-                         minZ: cz - d * 0.5, maxZ: cz + d * 0.5, y: surfaceY });
-    }
+    // Boundary walls
+    [[0, 410, 820, 20, 80], [0, -410, 820, 20, 80],
+     [410, 0, 20, 820, 80], [-410, 0, 20, 820, 80]].forEach(([cx,cz,w,d,h]) => addBox(cx,cz,w,d,h,mWall));
 
-    // ramp along Z: fromZ→toZ, floor rises fromY→toY, width w centred on cx
-    function rampZ(cx, fromZ, toZ, w, fromY, toY, mat) {
-        const cz    = (fromZ + toZ) * 0.5;
-        const cy    = (fromY + toY) * 0.5;
-        const dz    = toZ - fromZ;
-        const dy    = toY - fromY;
-        const len   = Math.sqrt(dz * dz + dy * dy);
-        const angle = Math.atan2(dy, dz);
-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, 2, len), mat);
-        m.position.set(cx, cy, cz);
-        m.rotation.x = -angle;
-        m.castShadow = globalSettings.shadows;
-        m.receiveShadow = globalSettings.shadows;
-        scene.add(m);
-        // mathematical surface (startY = height at minZ, endY = height at maxZ)
-        const minZ = Math.min(fromZ, toZ), maxZ = Math.max(fromZ, toZ);
-        const sY   = fromZ < toZ ? fromY : toY;
-        const eY   = fromZ < toZ ? toY   : fromY;
-        rampSurfaces.push({ minX: cx - w * 0.5, maxX: cx + w * 0.5,
-                             minZ, maxZ, startY: sY, endY: eY, axis: 'z' });
-    }
-
-    // ramp along X
-    function rampX(cz, fromX, toX, w, fromY, toY, mat) {
-        const cx    = (fromX + toX) * 0.5;
-        const cy    = (fromY + toY) * 0.5;
-        const dx    = toX - fromX;
-        const dy    = toY - fromY;
-        const len   = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-        const m = new THREE.Mesh(new THREE.BoxGeometry(len, 2, w), mat);
-        m.position.set(cx, cy, cz);
-        m.rotation.z = angle;
-        m.castShadow = globalSettings.shadows;
-        m.receiveShadow = globalSettings.shadows;
-        scene.add(m);
-        const minX = Math.min(fromX, toX), maxX = Math.max(fromX, toX);
-        const sY   = fromX < toX ? fromY : toY;
-        const eY   = fromX < toX ? toY   : fromY;
-        rampSurfaces.push({ minX, maxX, minZ: cz - w * 0.5, maxZ: cz + w * 0.5,
-                             startY: sY, endY: eY, axis: 'x' });
-    }
-
-    // enclosed tunnel segment: floor at groundY, interior height h, walls + ceiling
-    function tunnel(minX, maxX, minZ, maxZ, wallThick, intH, groundY, mat) {
-        const w = maxX - minX, d = maxZ - minZ;
-        const cx = (minX + maxX) * 0.5, cz = (minZ + maxZ) * 0.5;
-        // ceiling
-        box(cx, cz, w, d, wallThick, groundY + intH, mat, true);
-        ceilingSurfaces.push({ minX, maxX, minZ, maxZ, y: groundY + intH });
-        // side walls (left/right along Z)
-        box(minX + wallThick * 0.5, cz, wallThick, d, intH + wallThick, groundY, mat);
-        box(maxX - wallThick * 0.5, cz, wallThick, d, intH + wallThick, groundY, mat);
-    }
-
-    // ── BOUNDARY WALLS ────────────────────────────────────────────────────
-    box(   0,  410, 820,  20, 80, 0, mDark);
-    box(   0, -410, 820,  20, 80, 0, mDark);
-    box( 410,    0,  20, 820, 80, 0, mDark);
-    box(-410,    0,  20, 820, 80, 0, mDark);
-
-    // ── CENTRAL PROCESSING PLANT ──────────────────────────────────────────
-    // Four walls with entrance gaps (each wall = two segments)
-    const cpH = 28, cpW = 110;
-    // North wall (gap in centre −15→+15)
-    box(-62+cpW*0.5*0, 55, 42, 8, cpH, 0, mConc); // reuse below approach
-    box(-55, 55, 20, 8, cpH, 0, mConc);   box(55, 55, 20, 8, cpH, 0, mConc);
-    box(-55, -55, 20, 8, cpH, 0, mConc);  box(55, -55, 20, 8, cpH, 0, mConc);
-    box(-55, 0, 8, 102, cpH, 0, mConc);   box(55, 0, 8, 102, cpH, 0, mConc);
-    // Roof (passable from outside, visual only)
-    box(0, 0, 102, 102, 4, cpH, mSteel, true);
-    // Interior cover pillars
-    box(-30, 30, 6, 6, cpH, 0, mSteel); box(30, -30, 6, 6, cpH, 0, mSteel);
-    box(-30, -30, 6, 6, cpH, 0, mSteel); box(30, 30, 6, 6, cpH, 0, mSteel);
-
-    // ── WEST REFINERY ─────────────────────────────────────────────────────
-    // 4 large storage tanks
-    box(-190, 90,  26, 26, 70, 0, mRust); box(-260, 90,  24, 24, 55, 0, mRust);
-    box(-190, 180, 24, 24, 55, 0, mRust); box(-260, 180, 20, 20, 42, 0, mRust);
-    // Pipe connecting tanks (visual)
-    box(-225, 90, 6, 44, 8, 40, mSteel, true);
-    box(-190, 135, 6, 6, 8, 40, mSteel, true);
-    // Catwalk platform at y=32 connecting the tanks
-    platform(-225, 135, 80, 10, 32, mCat);
-    platform(-190, 90, 10, 18, 32, mCat);
-    // Ramp up to catwalk from south (z=72→90, y=0→32)
-    rampZ(-225, 60, 90, 14, 0, 32, mSteel);
-    // Catwalk guard rails (thin)
-    box(-185, 135, 2, 80, 4, 32, mSteel); box(-265, 135, 2, 80, 4, 32, mSteel);
-
-    // ── CONTAINER MAZE (EAST) ─────────────────────────────────────────────
-    // Rows of shipping containers at x=130→320, z=-100→200
-    const contDefs = [
-        // [cx, cz, rotated?]  each container is 22×9×9
-        [150, -80, 0], [150, -52, 0], [150, -24, 0],
-        [150,  80, 0], [150, 110, 0], [150, 140, 0],
-        [200, -70, 0], [200, -40, 0], [200,  50, 0], [200, 80, 0],
-        [250, -80, 0], [250, -50, 0], [250,  20, 0], [250,  60, 0],
-        [300, -60, 0], [300,  30, 0], [300,  90, 0],
-        [175,  10, 1], [225, -15, 1], [275,  45, 1],  // cross-aisle blockers
+    // Buildings [cx, cz, w, d, h, matIndex]
+    const buildings = [
+        [80, 80, 30, 30, 60, 0],   [-80, 80, 25, 25, 45, 1],
+        [80, -80, 30, 25, 50, 2],  [-80, -80, 25, 30, 55, 0],
+        [0, 130, 40, 20, 35, 1],   [0, -130, 35, 20, 40, 2],
+        [160, 0, 25, 25, 70, 0],   [-160, 0, 30, 25, 65, 1],
+        [160, 130, 20, 20, 45, 2], [-160, 130, 20, 20, 50, 0],
+        [160, -130, 20, 20, 55, 1],[-160, -130, 20, 20, 40, 2],
+        [240, 80, 30, 30, 80, 0],  [-240, 80, 25, 25, 60, 1],
+        [240, -80, 25, 30, 70, 2], [-240, -80, 30, 25, 65, 0],
+        [280, 0, 20, 60, 50, 1],   [-280, 0, 20, 60, 45, 2],
+        [0, 240, 60, 20, 55, 0],   [0, -240, 60, 20, 60, 1],
+        [120, 0, 15, 15, 30, 2],   [-120, 0, 15, 15, 25, 0],
+        [60, 200, 20, 20, 35, 1],  [-60, 200, 20, 20, 40, 2],
+        [60, -200, 20, 20, 30, 0], [-60, -200, 20, 20, 45, 1],
+        [340, 200, 25, 25, 65, 2], [-340, 200, 25, 25, 50, 0],
+        [340, -200, 20, 20, 45, 1],[-340, -200, 20, 20, 55, 2],
     ];
-    contDefs.forEach(([cx, cz, rot], i) => {
-        const mat = i % 3 === 0 ? mCont : i % 3 === 1 ? mCont2 : mHaz;
-        const m = new THREE.Mesh(geo1, mat);
-        m.scale.set(rot ? 9 : 22, 9, rot ? 22 : 9);
-        m.position.set(cx, 4.5, cz);
-        m.castShadow = globalSettings.shadows;
-        m.receiveShadow = globalSettings.shadows;
-        scene.add(m); objects.push(m);
-    });
-    // Elevated container stacks (second layer = platform top at y=9)
-    [[150,-80],[200,-70],[250,60],[300,30]].forEach(([cx,cz]) => {
-        const m = new THREE.Mesh(geo1, mCont2);
-        m.scale.set(22, 9, 9); m.position.set(cx, 13.5, cz);
-        m.castShadow = true; scene.add(m); objects.push(m);
-        platforms.push({ minX: cx-11, maxX: cx+11, minZ: cz-4.5, maxZ: cz+4.5, y: 18 });
-    });
-    // Ramp up to one container stack top
-    rampZ(150, -100, -80, 10, 0, 18, mSteel);
+    const mats = [mGray, mBlue, mBrown];
+    buildings.forEach(([cx,cz,w,d,h,mi]) => addBox(cx,cz,w,d,h,mats[mi]));
 
-    // ── NORTH ELEVATED PLATFORM ───────────────────────────────────────────
-    platform(0, 230, 120, 50, 24, mConc);
-    // Two ramps leading up from south
-    rampZ(-35, 195, 205, 18, 0, 24, mSteel);
-    rampZ( 35, 195, 205, 18, 0, 24, mSteel);
-    // Walls on elevated section (cover)
-    box(-40, 255, 6, 30, 10, 24, mSteel); box(40, 255, 6, 30, 10, 24, mSteel);
-    box(0, 215, 60, 6, 6, 24, mConc);
-
-    // ── EAST-WEST GROUND TUNNEL ───────────────────────────────────────────
-    // Runs x=−90→90 at z=−80 to z=−60, interior height 16
-    tunnel(-90, 90, -90, -60, 4, 16, 0, mConc);
-    // Entrance ramps at each end (slight step-down effect — just visual, floor is 0)
-    box(-90, -75, 8, 10, 16, 0, mConc);  // left end cap
-    box( 90, -75, 8, 10, 16, 0, mConc);  // right end cap
-
-    // ── NORTH-SOUTH DIAGONAL TUNNEL ───────────────────────────────────────
-    // Runs z=70→130 at x=−20→20, interior height 14
-    tunnel(-20, 20, 70, 130, 4, 14, 0, mSteel);
-
-    // ── SE INDUSTRIAL SHED ────────────────────────────────────────────────
-    const shedH = 20;
-    box(245, -200, 6, 140, shedH, 0, mConc); // west wall
-    box(345, -200, 6, 140, shedH, 0, mConc); // east wall
-    box(295, -128, 96, 6,  shedH, 0, mConc); // north wall — entrance gap: cover provided by pillars
-    box(295, -272, 96, 6,  shedH, 0, mConc); // south wall
-    box(295, -200, 96, 140, 4, shedH, mConc, true); // roof (visual)
-    // Interior machinery covers
-    box(275, -180, 14, 14, 14, 0, mSteel); box(315, -220, 14, 14, 14, 0, mSteel);
-    box(270, -250, 10, 18, 10, 0, mRust);  box(320, -170, 10, 10, 10, 0, mRust);
-    // Ramp inside shed up to raised section
-    platform(295, -240, 90, 30, 12, mSteel);
-    rampZ(295, -272, -240, 20, 0, 12, mSteel);
-
-    // ── SW HEAVY MACHINERY ZONE ───────────────────────────────────────────
-    box(-200, -180, 50, 50, 18, 0, mRust);  // main block
-    box(-280, -200, 30, 60, 30, 0, mConc);  // support tower
-    box(-220, -290, 70, 40, 14, 0, mSteel); // low shed
-    box(-280, -300, 30, 20, 50, 0, mConc);  // tall chimney
-    // Scattered crates/barrels in SW zone
-    [[-170,-230],[-150,-270],[-240,-240],[-200,-320],[-160,-310]].forEach(([cx,cz]) => {
-        box(cx, cz, 8, 8, 8, 0, mHaz);
-    });
-
-    // ── NW SNIPER TOWER ───────────────────────────────────────────────────
-    box(-310, 310, 22, 22, 80, 0, mConc);   // tower body
-    // Spiral ramp around north face
-    rampZ(-299, 250, 310, 12, 0, 40, mSteel);   // ramp up to mid-level
-    platform(-310, 310, 22, 22, 80, mCat);       // sniper top
-
-    // ── NE WATCHTOWER ─────────────────────────────────────────────────────
-    box(310, 310, 20, 20, 60, 0, mConc);
-    rampZ(321, 250, 310, 10, 0, 30, mSteel);
-    platform(310, 310, 20, 20, 60, mCat);
-
-    // ── CATWALKS / ELEVATED BRIDGES ───────────────────────────────────────
-    // Main E-W catwalk at y=32 from x=-170 to x=130 (connects refinery to north platform area)
-    platform(-20, 90, 280, 8, 32, mCat);
-    box(-20, 90, 280, 2, 4, 32, mSteel, true);  // railing visual
-
-    // ── SCATTERED COVER EVERYWHERE ───────────────────────────────────────
-    const coverSpots = [
-        [80,  120, 10, 8, 10], [-80,  120, 10, 8, 10],
-        [80, -120, 10, 8, 10], [-80, -120, 10, 8, 10],
-        [160,  10, 8, 12, 8],  [-160,  10, 8, 12, 8],
-        [0, -180, 12, 8, 8],   [0,  180, 12, 8, 8],
-        [120, 50, 8, 8, 8],    [-120, 50, 8, 8, 8],
-        [120, -50, 8, 8, 8],   [-120,-50, 8, 8, 8],
-    ];
-    coverSpots.forEach(([cx,cz,w,d,h]) => box(cx, cz, w, d, h, 0, mHaz));
+    // Low cover barriers
+    [[0,0,8,8,4],[40,40,6,10,4],[-40,40,6,10,4],[40,-40,6,10,4],[-40,-40,6,10,4],
+     [120,120,10,4,5],[-120,120,10,4,5],[120,-120,10,4,5],[-120,-120,10,4,5],
+     [200,40,4,8,4],[-200,40,4,8,4],[200,-40,4,8,4],[-200,-40,4,8,4],
+     [50,0,4,8,4],[-50,0,4,8,4],[0,60,8,4,4],[0,-60,8,4,4],
+    ].forEach(([cx,cz,w,d,h]) => addBox(cx,cz,w,d,h,mCover));
 }
 
 function init() {
@@ -1078,31 +886,26 @@ function init() {
     camera.position.y = 7;
 
     scene = new THREE.Scene();
-    // Realistic city overcast day environment
-    scene.background = new THREE.Color(0x1a1e22);
-    scene.fog = new THREE.FogExp2(0x1a1e22, 0.0025);
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.FogExp2(0x87ceeb, 0.0015);
 
-    // Industrial night sky — cool blue-grey ambient
-    const skyLight = new THREE.HemisphereLight(0x2a3a4a, 0x0a0a08, 0.6);
-    skyLight.position.set(0, 1, 0);
+    const skyLight = new THREE.HemisphereLight(0xffffff, 0xaabb88, 1.2);
     scene.add(skyLight);
-    // Harsh sodium-vapour floodlight from above (industrial lighting)
-    const dirLight = new THREE.DirectionalLight(0xffeebb, 0.9);
-    dirLight.position.set(-200, 500, 100);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(200, 500, 100);
     dirLight.castShadow = globalSettings.shadows;
     dirLight.shadow.camera.top = 500;
     dirLight.shadow.camera.bottom = -500;
     dirLight.shadow.camera.left = -500;
     dirLight.shadow.camera.right = 500;
-    dirLight.shadow.mapSize.width = 4096;
-    dirLight.shadow.mapSize.height = 4096;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
     dirLight.shadow.camera.near = 10;
     dirLight.shadow.camera.far = 1200;
     scene.add(dirLight);
 
-    // Cool fill — simulates sky reflection off metal surfaces
-    const fillLight = new THREE.DirectionalLight(0x334455, 0.35);
-    fillLight.position.set(300, 200, -100);
+    const fillLight = new THREE.DirectionalLight(0xaaccff, 0.4);
+    fillLight.position.set(-300, 200, -100);
     scene.add(fillLight);
 
     controls = new PointerLockControls(camera, document.body);
@@ -1185,26 +988,24 @@ function init() {
 
     raycaster = new THREE.Raycaster();
 
-    // Asphalt floor — dark matte concrete look
     const floorGeometry = new THREE.PlaneGeometry(2000, 2000);
     floorGeometry.rotateX(-Math.PI / 2);
     const floorMaterial = new THREE.MeshStandardMaterial({
-        color: 0x111210,
-        roughness: 0.98,
+        color: 0x999988,
+        roughness: 0.95,
         metalness: 0.0
     });
     const floor = new THREE.Mesh(floorGeometry, floorMaterial);
     floor.receiveShadow = globalSettings.shadows;
     scene.add(floor);
 
-    // Subtle road marking grid — very faint
-    const gridHelper = new THREE.GridHelper(2000, 50, 0x333330, 0x252520);
-    gridHelper.position.y = 0.15;
-    gridHelper.material.opacity = 0.15;
+    const gridHelper = new THREE.GridHelper(2000, 100, 0x777766, 0x666655);
+    gridHelper.position.y = 0.1;
+    gridHelper.material.opacity = 0.3;
     gridHelper.material.transparent = true;
     scene.add(gridHelper);
 
-    buildIndustrialMap();
+    buildCity();
     createGuns();
 
     // No initial bots (reserved for multiplayer)
@@ -1349,22 +1150,12 @@ function onMouseUp(event) {
     }
 }
 
-// Check collision with buildings (height-aware so elevated platforms don't block below)
 function checkCollision(position) {
     const px = position.x;
     const pz = position.z;
-    const py = position.y;      // player eye Y
     const radius = 3;
 
     for (let obj of objects) {
-        const objBottom = obj.position.y - obj.scale.y / 2;
-        const objTop    = obj.position.y + obj.scale.y / 2;
-        // Skip if player is fully below this object (standing under it is allowed)
-        if (py > objTop + 0.5) continue;
-        // Skip if player eye is above the object's bottom by more than step height (platform collision only from side)
-        // Allow stepping onto objects shorter than the player's step height (2 units)
-        if (objBottom > py + 2) continue;
-
         const minX = obj.position.x - obj.scale.x / 2 - radius;
         const maxX = obj.position.x + obj.scale.x / 2 + radius;
         const minZ = obj.position.z - obj.scale.z / 2 - radius;
@@ -1455,21 +1246,10 @@ function animate() {
 
         // Vertical movement
         playerObj.position.y += (velocity.y * delta);
-        const floorY = getFloorHeight(playerObj.position.x, playerObj.position.z) + 7;
-        if (playerObj.position.y < floorY) {
+        if (playerObj.position.y < 7) {
             velocity.y = 0;
-            playerObj.position.y = floorY;
+            playerObj.position.y = 7;
             canJump = true;
-        }
-        // Ceiling collision inside tunnels / under platforms
-        for (const c of ceilingSurfaces) {
-            if (playerObj.position.x > c.minX && playerObj.position.x < c.maxX &&
-                playerObj.position.z > c.minZ && playerObj.position.z < c.maxZ) {
-                if (playerObj.position.y > c.y - 2) {
-                    velocity.y = Math.min(0, velocity.y);
-                    playerObj.position.y = c.y - 2;
-                }
-            }
         }
         
         // Broadcast my position
