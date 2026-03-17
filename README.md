@@ -12,7 +12,7 @@ A high-performance, multiplayer browser-based First Person Shooter built with **
 - **Customizable**: Built-in settings for FOV, Sensitivity, and Crosshair colors.
 
 ## 🚀 Quick Start
-1. Clone the repo: `git clone https://github.com/SolarChud/ontro-fps-.git`
+1. Clone the repo: `git clone https://github.com/d1tokirb/ontrofps.git`
 2. Install dependencies: `npm install`
 3. Start the server: `npm start`
 4. Open `http://localhost:8000` in your browser.
@@ -20,7 +20,7 @@ A high-performance, multiplayer browser-based First Person Shooter built with **
 ## 🛠️ Tech Stack
 - **Frontend**: Three.js (WebGL), Vanilla JS, CSS3.
 - **Backend**: Node.js, Express, Socket.io.
-- **Deployment**: Optimized for Vercel (Frontend) & Railway (Backend).
+- **Deployment**: Optimized for Vercel (Frontend) & Railway (Backend). Live at: [ontrofps-production.up.railway.app](https://ontrofps-production.up.railway.app)
 
 ## ⌨️ Controls
 - **WASD**: Move

@@ -252,7 +252,7 @@ startBtn.addEventListener('click', () => {
         // ======= DEPLOYMENT CONFIG =======
         // 1. Deploy 'server.js' to Railway.app
         // 2. Paste your Railway URL below:
-        const RAILWAY_URL = "https://your-app-name.up.railway.app"; 
+        const RAILWAY_URL = "https://ontrofps-production.up.railway.app"; 
         
         const socketUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
             ? undefined // Defaults to current origin (good for local dev)
